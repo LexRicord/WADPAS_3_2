@@ -1,0 +1,43 @@
+use coloc_wadpas;
+
+--1. Найти третьего по успешности сотрудника каждого отдела (по кол-ву товаров)
+
+select distinct S.EMPL_NUM, s.REP_OFFICE, t.sumQTY
+	from SALESREPS S
+	join
+(
+select top(1000) S.EMPL_NUM, s.REP_OFFICE, 
+	sum(ord.QTY) over(partition by s.rep_office, s.empl_num order by s.rep_office) as sumQTY,
+	dense_rank() over (partition by s.rep_office order by s.empl_num) as numberInOffice,
+	CASE
+		WHEN dense_rank() over (partition by s.rep_office order by s.empl_num) = 3 THEN 1
+	else 0
+	end TrueOrFalseFinding
+	from SALESREPS S
+	inner join ORDERS ORD 
+	on s.EMPL_NUM = ord.REP
+	order by s.REP_OFFICE, sumQTY desc
+) t 
+on t.EMPL_NUM = s.EMPL_NUM and s.REP_OFFICE = t.REP_OFFICE
+	where t.TrueOrFalseFInding = 1;
+
+--2. Выяснить, как отличаются продажи самого успешного сотрудника 
+--каждого отдела от продаж других сотрудников этого же отдела(в %) 
+
+select s.empl_num, s.REP_OFFICE, s.SALES, 
+avg(s.sales) over (partition by rep_office)/max(s.sales)
+over () * 100 as percentageOfSalesInCompareWithAvgSales,
+cast(100. * s.SALES / max(s.SALES) over (partition by s.rep_office)
+					as decimal(5,2)) as percentageInCompareWithSingleSales
+from SALESREPS S;
+
+--3. Выяснить, на сколько % отличаются продажи товаров каждого 
+--сотрудника в отделе от предыдущего,  если упорядочить по возрастанию
+
+select s.empl_num, s.REP_OFFICE, s.SALES, 
+ROW_NUMBER() over (partition by s.rep_office order by s.empl_num) as numberInOffice,
+CASE
+WHEN ROW_NUMBER() over (partition by s.rep_office order by s.empl_num) = 1  THEN 100
+else cast(100. * s.SALES / LAG(s.SALES) over (order by s.rep_office, s.sales asc)
+					as decimal(6,2))
+end percentageInCompareWithPreviousSales from SALESREPS S;
